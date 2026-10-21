@@ -68,6 +68,8 @@ contract OpenPoolTest is HookFixture {
         c = OpenPool.OpenConfig(
             h,
             TickMath.getSqrtPriceAtTick(180000),
+            TickMath.getSqrtPriceAtTick(179000),
+            TickMath.getSqrtPriceAtTick(181000),
             preset == OpenPool.Preset.C ? 0 : uint128(1 ether),
             100_000_000 ether,
             block.timestamp + 900,
@@ -147,6 +149,41 @@ contract OpenPoolTest is HookFixture {
         c.deadline = block.timestamp - 1;
         vm.expectRevert("deadline");
         script.build(c);
+    }
+
+    function test_livePriceOutsideOwnerBandIsRefused() public {
+        OpenPool.OpenConfig memory c = _config(OpenPool.Preset.A);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(181001);
+        vm.expectRevert("live price outside owner band");
+        script.build(c);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(178999);
+        vm.expectRevert("live price outside owner band");
+        script.build(c);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(181000);
+        script.build(c);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(179000);
+        script.build(c);
+        c.minSqrtPriceX96 = 0;
+        vm.expectRevert("price band");
+        script.build(c);
+        c.minSqrtPriceX96 = c.maxSqrtPriceX96 + 1;
+        vm.expectRevert("price band");
+        script.build(c);
+    }
+
+    function test_bRejectsLivePriceOutsideItsRange() public {
+        OpenPool.OpenConfig memory c = _config(OpenPool.Preset.B);
+        c.minSqrtPriceX96 = TickMath.MIN_SQRT_PRICE + 1;
+        c.maxSqrtPriceX96 = TickMath.MAX_SQRT_PRICE - 1;
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(187000);
+        vm.expectRevert("B is not in range at live price");
+        script.build(c);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(172600);
+        vm.expectRevert("B is not in range at live price");
+        script.build(c);
+        c.sqrtPriceX96 = TickMath.getSqrtPriceAtTick(172601);
+        (, uint128 liquidity) = script.build(c);
+        assertGt(liquidity, 0);
     }
 
     function test_namedPresetTicks() public view {

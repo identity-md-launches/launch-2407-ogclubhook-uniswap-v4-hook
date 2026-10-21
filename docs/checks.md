@@ -1,18 +1,20 @@
-# Local check record — 2026-10-21
+# Local check record — 2026-10-21 (revision)
 
 These are author-run checks, not independent audit authority or live deployment receipts.
 
 | Check | Result |
 |---|---|
 | `forge build` | Pass, Solidity 0.8.26, Cancun, optimizer 200, via IR, bytecode hash none |
-| `forge test --offline -vv` with the requested fuzz seed | 66 passed, 0 failed; 2 optional fork tests skipped |
+| `forge test -vv` with the requested fuzz seed | 78 passed, 0 failed; 2 optional fork tests skipped |
 | `forge fmt --check` | Pass |
 | Fee fuzz | 256 cases across all four modes |
 | Bidirectional sandwich fuzz | 256 cases per direction, 0.1%–50% of active virtual reserves |
 | Sandwich grid | 500 buy/flush/sell sizes, 0.1% through 50% in 0.1% increments |
+| JIT sandwich fuzz | 256 cases per variant with the pinned seed, also 2000 runs each locally; pushes 0.1%–50%, JIT 1x–100x real depth, one and two blocks |
+| JIT grid | 100 push sizes with tenfold JIT; separate local sweep: 30 of 120 push/JIT cases bought, best attacker outcome −0.000197 ETH (one block), −0.00028 ETH (two blocks) |
 | Stateful conservation | 64 runs × 32 calls = 2048 actions, zero reverts |
-| Mainnet pinned fork | Pass at block 26242828 |
-| Sepolia pinned fork | Pass at block 11964302 |
+| Mainnet pinned fork | Passed at block 26242828 before this revision; not re-run in the revision (no network), re-run before release |
+| Sepolia pinned fork | Passed at block 11964302 before this revision; not re-run in the revision, re-run before release |
 | ABI export | Both delivered JSON ABIs equal their compiled artifact ABIs |
 | Library linking | No unresolved creation/runtime link references in either application |
 | Runtime opcode/size probe | Pass for both application contracts |
@@ -28,7 +30,7 @@ Foundry reports generic static lint warnings; their relevance and safeguards are
 
 ## Pinned fork evidence
 
-The final fork checks used the real deployed protocol contracts and the same hook/deployer production sources identified below. They initialize a **fork-local** pool via PositionManager, trade both directions through the real Universal Router, flush, and exercise proposal/claim on the live vault's forked storage. Actor balances and elapsed time are simulated with test cheatcodes. No transactions were sent to either chain.
+The fork checks used the real deployed protocol contracts and the hook/deployer sources of the previously accepted round; the revised hook changes only the flush sizing, price limit and treasury ordering, and the fork tests pass the explicit price as its own acceptance band. They must be re-run on the revised sources before release. They initialize a **fork-local** pool via PositionManager, trade both directions through the real Universal Router, flush, and exercise proposal/claim on the live vault's forked storage. Actor balances and elapsed time are simulated with test cheatcodes. No transactions were sent to either chain.
 
 | Field | Ethereum fork | Sepolia fork |
 |---|---|---|
@@ -61,20 +63,20 @@ Additional read-only observations, including contract byte lengths, SHA-256 hash
 
 | Contract | Creation bytecode bytes, excluding args | Runtime bytes | EIP-170 limit |
 |---|---:|---:|---:|
-| OGClubHook | 10517 | 9107 | 24576 |
-| OGClubHookDeployer | 12981 | 12425 | 24576 |
+| OGClubHook | 11431 | 9993 | 24576 |
+| OGClubHookDeployer | 13895 | 13339 | 24576 |
 
 The static seven-argument constructor encoding adds 224 bytes to either creation bytecode. Both remain below the 49152-byte init-code limit. Hook runtime immutables and its CREATE2 address depend on the actual constructor values; the source hashes below are **not** deployment bytecode hashes.
 
 ```text
 src/OGClubHook.sol SHA256
-1942dbf71181c71e6e1828e4e13f7d846334511f413b960881913b07ba4274d2
+39be0200a28aa5b12f8c946d3fa3a4dda1081b72dbe1977cf16c1ba191f47d97
 
 src/OGClubHookDeployer.sol SHA256
 444c296d7e1cb60eef17902ee2cc41666031382d6559fea13b1075b7163a0033
 
 abi/OGClubHook.json SHA256
-ed52392be775d89cbeef0c2e3c4bd61a910ff0a2e3cfd737d7caca31b634722c
+25c9dd46719872648e0d0c11c3e4eefa469061d55f54b8e913d67f8138a5b518
 
 abi/OGClubHookDeployer.json SHA256
 f11d1f81fcc8c94c32e5208c3793f28ce5d4565062a7b1560830c34ee1c0d276

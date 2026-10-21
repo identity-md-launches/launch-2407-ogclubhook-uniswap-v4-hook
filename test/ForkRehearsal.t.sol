@@ -69,7 +69,9 @@ abstract contract ForkRehearsal is Test {
         deal(token, initializer, uint256(ogMax) * 2); // Fork-only funding, not a live-chain transaction.
         OpenPool builder = new OpenPool();
         (bytes[] memory calls,) = builder.build(
-            OpenPool.OpenConfig(h, price, 2 ether, ogMax, vm.getBlockTimestamp() + 900, OpenPool.Preset.A, initializer)
+            OpenPool.OpenConfig(
+                h, price, price, price, 2 ether, ogMax, vm.getBlockTimestamp() + 900, OpenPool.Preset.A, initializer
+            )
         );
         vm.startPrank(initializer, initializer);
         IERC20(token).approve(Networks.PERMIT2, ogMax);
