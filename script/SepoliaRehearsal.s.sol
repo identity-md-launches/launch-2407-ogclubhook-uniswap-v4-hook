@@ -85,7 +85,8 @@ contract SepoliaRehearsal is OpenPool {
         require(!h.opened(), "already open");
         uint256 deadline = block.timestamp + 900;
         address initializer = h.INITIALIZER();
-        (bytes[] memory calls,) = build(OpenConfig(h, price, ethMax, ogMax, deadline, Preset.A, initializer));
+        (bytes[] memory calls,) =
+            build(OpenConfig(h, price, price, price, ethMax, ogMax, deadline, Preset.A, initializer));
         vm.startBroadcast(initializer);
         require(IERC20(Networks.SEPOLIA_OG).approve(Networks.PERMIT2, ogMax), "approval");
         IAllowanceTransfer(Networks.PERMIT2)

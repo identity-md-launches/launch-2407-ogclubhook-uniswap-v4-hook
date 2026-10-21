@@ -27,6 +27,8 @@ contract OpenPool is Script {
     struct OpenConfig {
         OGClubHook hook;
         uint160 sqrtPriceX96;
+        uint160 minSqrtPriceX96; // owner's acceptance band for the live old-pool read, inclusive
+        uint160 maxSqrtPriceX96;
         uint128 ethMax;
         uint128 ogMax;
         uint256 deadline;
@@ -45,8 +47,19 @@ contract OpenPool is Script {
     function build(OpenConfig memory c) public view returns (bytes[] memory calls, uint128 liquidity) {
         require(c.recipient != address(0), "recipient");
         require(c.sqrtPriceX96 > TickMath.MIN_SQRT_PRICE && c.sqrtPriceX96 < TickMath.MAX_SQRT_PRICE, "price");
+        require(c.minSqrtPriceX96 != 0 && c.minSqrtPriceX96 <= c.maxSqrtPriceX96, "price band");
+        require(
+            c.sqrtPriceX96 >= c.minSqrtPriceX96 && c.sqrtPriceX96 <= c.maxSqrtPriceX96, "live price outside owner band"
+        );
         require(c.deadline >= block.timestamp, "deadline");
         (int24 lower, int24 upper) = ticks(c.preset);
+        if (c.preset == Preset.B) {
+            require(
+                c.sqrtPriceX96 > TickMath.getSqrtPriceAtTick(lower)
+                    && c.sqrtPriceX96 < TickMath.getSqrtPriceAtTick(upper),
+                "B is not in range at live price"
+            );
+        }
         if (c.preset == Preset.C) {
             require(c.ethMax == 0 && c.ogMax != 0, "C requires OG only");
             require(c.sqrtPriceX96 >= TickMath.getSqrtPriceAtTick(upper), "C is not OG-only at live price");
@@ -81,12 +94,29 @@ contract OpenPool is Script {
         require(ethMax <= type(uint128).max && ogMax <= type(uint128).max, "amount too large");
         uint256 preset = vm.envUint("PRESET");
         require(preset <= uint256(Preset.C), "preset 0=A 1=B 2=C");
+        // The owner states the sqrtPriceX96 band they accept; a drifted or pushed old pool refuses to open.
+        uint256 minPrice = vm.envUint("MIN_SQRT_PRICE_X96");
+        uint256 maxPrice = vm.envUint("MAX_SQRT_PRICE_X96");
+        require(minPrice <= type(uint160).max && maxPrice <= type(uint160).max, "band too large");
         (uint160 price,,,) = IStateView(Networks.STATE_VIEW).getSlot0(PoolId.wrap(Networks.OLD_POOL_ID));
         require(price != 0, "old pool not initialized");
         uint256 deadline = block.timestamp + 15 minutes;
-        (bytes[] memory calls, uint128 liquidity) =
-            build(OpenConfig(hook, price, uint128(ethMax), uint128(ogMax), deadline, Preset(preset), Networks.OWNER));
+        (bytes[] memory calls, uint128 liquidity) = build(
+            OpenConfig(
+                hook,
+                price,
+                uint160(minPrice),
+                uint160(maxPrice),
+                uint128(ethMax),
+                uint128(ogMax),
+                deadline,
+                Preset(preset),
+                Networks.OWNER
+            )
+        );
         console2.log("live old-pool sqrtPriceX96", price);
+        console2.log("owner band min", minPrice);
+        console2.log("owner band max", maxPrice);
         console2.log("liquidity", liquidity);
         console2.log("owner must be transaction origin", Networks.OWNER);
         vm.startBroadcast(Networks.OWNER);

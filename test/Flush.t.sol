@@ -43,6 +43,46 @@ contract ReenteringTreasury {
     }
 }
 
+/// @notice Accepts the ETH but tries to leave the hook's flush with an unsettled PoolManager delta.
+contract VetoTreasury {
+    IPoolManager private immutable manager;
+    address private immutable hook;
+    bool public mintSucceeded;
+
+    constructor(IPoolManager m, address h) {
+        manager = m;
+        hook = h;
+    }
+
+    receive() external payable {
+        (mintSucceeded,) = address(manager).call(abi.encodeCall(IPoolManager.mint, (hook, 0, 1)));
+    }
+}
+
+/// @notice Donates native ERC-6909 claims to the hook: settles 1 wei and mints the claim to it.
+contract ClaimDonor is IUnlockCallback {
+    IPoolManager private immutable manager;
+    address private immutable hook;
+
+    constructor(IPoolManager m, address h) {
+        manager = m;
+        hook = h;
+    }
+
+    function donate() external payable {
+        manager.unlock(abi.encode(msg.value));
+    }
+
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        require(msg.sender == address(manager));
+        uint256 amount = abi.decode(data, (uint256));
+        manager.sync(Currency.wrap(address(0)));
+        manager.settle{value: amount}();
+        manager.mint(hook, 0, amount);
+        return "";
+    }
+}
+
 contract MidUnlockFlush is IUnlockCallback {
     IPoolManager private immutable manager;
     OGClubHook private immutable hook;
@@ -70,8 +110,8 @@ contract FlushTest is HookFixture {
         _swap(true, -10 ether);
         uint256 pending = hook.pendingFees();
         uint256 beforeVault = og.balanceOf(address(vault));
-        (uint256 preview,) = hook.previewBuy();
         _ready();
+        (uint256 preview,) = hook.previewBuy();
         vm.recordLogs();
         (uint256 spent, uint256 out, uint256 paid) = hook.flush();
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -100,9 +140,9 @@ contract FlushTest is HookFixture {
 
     function test_halfEthCap() public {
         _swap(true, -100 ether);
+        _ready();
         (uint256 buy,) = hook.previewBuy();
         assertEq(buy, 0.5 ether);
-        _ready();
         (uint256 spent,,) = hook.flush();
         assertEq(spent, 0.5 ether);
         assertEq(hook.pendingFees(), 0.5 ether);
@@ -114,10 +154,10 @@ contract FlushTest is HookFixture {
         _liquidity(key, -887200, 887200, -int256(990 ether));
         (uint160 price,,,) = manager.getSlot0(key.toId());
         uint256 expected = FullMath.mulDiv(10 ether, 1 << 96, price) * 50 / 10000;
+        _ready();
         (uint256 buy,) = hook.previewBuy();
         assertEq(buy, expected);
         assertLt(buy, 0.5 ether);
-        _ready();
         (uint256 spent,,) = hook.flush();
         assertEq(spent, expected);
         _conserved(hook);
@@ -140,9 +180,9 @@ contract FlushTest is HookFixture {
         _swap(true, -0.001 ether);
         uint256 claims = hook.pendingFees();
         assertLt(claims, hook.MIN_BUY_ETH());
+        _ready();
         (uint256 buy,) = hook.previewBuy();
         assertEq(buy, 0);
-        _ready();
         (uint256 spent, uint256 out,) = hook.flush();
         assertEq(spent, 0);
         assertEq(out, 0);
@@ -152,11 +192,35 @@ contract FlushTest is HookFixture {
 
     function test_exactMinimumBuys() public {
         _swap(true, -0.01 ether);
+        _ready();
         (uint256 buy,) = hook.previewBuy();
         assertEq(buy, hook.MIN_BUY_ETH());
-        _ready();
         (uint256 spent,,) = hook.flush();
         assertEq(spent, buy);
+    }
+
+    function test_previewIsZeroUntilAReferenceWindowExists() public {
+        _swap(true, -10 ether);
+        // Same second as the opening: no time-weighted window yet, so nothing would be bought.
+        (uint256 buy, uint160 limit) = hook.previewBuy();
+        assertEq(buy, 0);
+        assertEq(limit, 0);
+        (uint160 refPrice, uint128 refLiquidity) = hook.referenceState();
+        assertEq(refPrice, 0);
+        assertEq(refLiquidity, 0);
+        vm.warp(block.timestamp + 1);
+        (refPrice, refLiquidity) = hook.referenceState();
+        (uint160 spot,,,) = manager.getSlot0(key.toId());
+        assertEq(refPrice, spot, "one quiet second: the reference is the price the swap left");
+        assertEq(refLiquidity, manager.getLiquidity(key.toId()));
+        (buy,) = hook.previewBuy();
+        assertEq(buy, 0.1 ether);
+        _ready();
+        (uint256 spent,,) = hook.flush();
+        assertEq(spent, 0.1 ether);
+        (buy, limit) = hook.previewBuy();
+        assertEq(buy, 0, "the flush second starts a new empty window");
+        assertEq(limit, 0);
     }
 
     function test_zeroLiquiditySkips() public {
@@ -179,9 +243,9 @@ contract FlushTest is HookFixture {
         int24 lower = (tick / 200 - 1) * 200;
         // One active range then an empty gap: it runs out before spending its capped input.
         _liquidity(key, lower, lower + 200, int256(10 ether));
+        _ready();
         (uint256 buy, uint160 limit) = hook.previewBuy();
         assertGt(buy, 0);
-        _ready();
         (uint256 spent, uint256 out,) = hook.flush();
         (uint160 afterPrice,,,) = manager.getSlot0(key.toId());
         assertGt(spent, 0);
@@ -193,6 +257,27 @@ contract FlushTest is HookFixture {
         assertGe(uint256(afterPrice) * afterPrice * 102, uint256(beforePrice) * beforePrice * 100);
         assertEq(hook.pendingFees(), hook.totalFees() - spent);
         _conserved(hook);
+    }
+
+    function test_donatedClaimsAreFlushedUnderTheSameCapsAndCountedSeparately() public {
+        _swap(true, -1 ether);
+        assertEq(hook.totalFees(), 0.01 ether);
+        ClaimDonor donor = new ClaimDonor(manager, address(hook));
+        donor.donate{value: 1 ether}();
+        assertEq(hook.pendingFees(), 1.01 ether, "a donation is a claim like any other");
+        // Fee accounting counts swap fees only: the identity holds with the donation on the claims side.
+        assertEq(
+            hook.pendingFees() + hook.heldEth() + hook.totalSpent() + hook.totalFlushed(), hook.totalFees() + 1 ether
+        );
+        _ready();
+        (uint256 spent, uint256 out,) = hook.flush();
+        assertEq(spent, 0.5 ether, "the ceiling still binds");
+        assertGt(out, 0);
+        assertEq(hook.pendingFees(), 0.51 ether);
+        assertEq(
+            hook.pendingFees() + hook.heldEth() + hook.totalSpent() + hook.totalFlushed(), hook.totalFees() + 1 ether
+        );
+        assertEq(og.balanceOf(address(hook)), 0);
     }
 
     function test_midUnlockReverts() public {
@@ -310,6 +395,31 @@ contract FlushTest is HookFixture {
         vm.warp(h.nextFlushAt());
         h.flush();
         assertEq(h.heldEth(), 0.01 ether);
+        _conserved(h);
+    }
+
+    function test_treasuryCannotVetoFlushByLeavingAnUnsettledDelta() public {
+        (OGClubHook h,) = _deploy(5000, address(vault), treasury);
+        VetoTreasury veto = new VetoTreasury(manager, address(h));
+        vm.prank(owner);
+        h.setTreasury(address(veto));
+        _open(h, SQRT_ONE);
+        PoolKey memory k = h.poolKey();
+        _liquidity(k, -887200, 887200, int256(INITIAL_LIQUIDITY));
+        _swapKey(k, true, -10 ether, TickMath.MIN_SQRT_PRICE + 1);
+        assertEq(h.pendingFees(), 0.1 ether);
+        vm.warp(h.nextFlushAt());
+        uint256 beforeVault = og.balanceOf(address(vault));
+        (uint256 spent, uint256 out, uint256 paid) = h.flush();
+        assertEq(spent, 0.05 ether);
+        assertGt(out, 0);
+        assertEq(og.balanceOf(address(vault)) - beforeVault, out);
+        // The payment happens after PoolManager relocks, so the mint reverts and the ETH is accepted.
+        assertFalse(veto.mintSucceeded());
+        assertEq(paid, 0.05 ether);
+        assertEq(address(veto).balance, 0.05 ether);
+        assertEq(h.heldEth(), 0);
+        assertEq(h.pendingFees(), 0);
         _conserved(h);
     }
 

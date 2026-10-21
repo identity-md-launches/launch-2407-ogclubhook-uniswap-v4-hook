@@ -65,6 +65,19 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
     uint256 public totalFlushed;
     bool private awaitingUnlock;
 
+    // Time-weighted reference. Flush sizes and prices its buy against the pool as it has been since
+    // the previous flush, never against state the flush transaction itself can set up:
+    // the price a swap leaves behind only gains weight for the seconds it persists before the next
+    // swap or flush observes it, and liquidity only gains weight for the seconds between two
+    // observations that both show it (the smaller reading is attributed to the gap).
+    uint256 private cumSqrtPriceX96; // sum over time of observed sqrtPriceX96, in seconds
+    uint256 private cumLiquidity; // sum over time of observed active liquidity, in seconds
+    uint256 private flushCumSqrtPriceX96; // cumSqrtPriceX96 at the previous flush
+    uint256 private flushCumLiquidity; // cumLiquidity at the previous flush
+    uint160 private obsSqrtPriceX96; // sqrtPriceX96 left by the last observed swap
+    uint128 private obsLiquidity; // active liquidity at the last observation
+    uint256 private obsTimestamp;
+
     error InvalidAddress();
     error InvalidVaultBps();
     error WrongVaultToken();
@@ -141,6 +154,8 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
         if (tx.origin != INITIALIZER) revert NotInitializer();
         opened = true;
         lastFlush = block.timestamp;
+        obsSqrtPriceX96 = sqrtPriceX96;
+        obsTimestamp = block.timestamp;
         emit PoolOpened(POOL_ID, sqrtPriceX96);
         return IHooks.beforeInitialize.selector;
     }
@@ -179,6 +194,7 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
         bytes calldata
     ) internal override returns (bytes4, int128) {
         _checkPool(key);
+        _observe();
         int256 ethDelta = int256(delta.amount0());
         int256 specified = params.amountSpecified;
         if (params.zeroForOne && specified < 0) {
@@ -212,6 +228,37 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
         emit ClubFee(sender, params.zeroForOne, params.amountSpecified < 0, fee);
     }
 
+    /// @dev Credit the elapsed seconds to the state left by the previous observation, then record the current one.
+    function _observe() private {
+        uint256 elapsed = block.timestamp - obsTimestamp;
+        uint128 liquidity = poolManager.getLiquidity(POOL_ID);
+        if (elapsed != 0) {
+            uint128 held = obsLiquidity;
+            if (liquidity < held) held = liquidity;
+            cumSqrtPriceX96 += uint256(obsSqrtPriceX96) * elapsed;
+            cumLiquidity += uint256(held) * elapsed;
+            obsTimestamp = block.timestamp;
+        }
+        (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(POOL_ID);
+        obsSqrtPriceX96 = sqrtPriceX96;
+        obsLiquidity = liquidity;
+    }
+
+    /// @notice Time-weighted sqrtPriceX96 and active liquidity since the previous flush, as a flush now would use.
+    /// @dev Zero before the pool is open or within the opening/flush second. Not an oracle for other contracts.
+    function referenceState() public view returns (uint160 sqrtPriceX96, uint128 liquidity) {
+        uint256 window = block.timestamp - lastFlush;
+        if (!opened || window == 0) return (0, 0);
+        uint256 elapsed = block.timestamp - obsTimestamp;
+        uint128 current = poolManager.getLiquidity(POOL_ID);
+        uint128 held = obsLiquidity;
+        if (current < held) held = current;
+        uint256 priceSum = cumSqrtPriceX96 + uint256(obsSqrtPriceX96) * elapsed - flushCumSqrtPriceX96;
+        uint256 liquiditySum = cumLiquidity + uint256(held) * elapsed - flushCumLiquidity;
+        sqrtPriceX96 = uint160(priceSum / window);
+        liquidity = uint128(liquiditySum / window);
+    }
+
     /// @notice Outstanding native-currency ERC-6909 claims; excludes deferred treasury ETH.
     function pendingFees() public view returns (uint256) {
         return poolManager.balanceOf(address(this), 0);
@@ -221,22 +268,29 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
         return lastFlush + MIN_FLUSH_INTERVAL;
     }
 
-    /// @notice A spot-state estimate, not a guaranteed quote or an external price oracle.
+    /// @notice What a flush at this moment would buy: an estimate from spot and reference state, not a quote.
     function previewBuy() public view returns (uint256 ethToBuy, uint160 sqrtPriceLimitX96) {
         if (!opened) return (0, 0);
         return _preview(FullMath.mulDiv(pendingFees(), VAULT_BPS, BPS));
     }
 
+    /// @dev Depth is the smaller of current and time-weighted active liquidity, so just-in-time liquidity
+    /// cannot lift the 0.5% reserve cap. The price limit is the tighter of 2% from spot and 2% above the
+    /// time-weighted price, so a price pushed inside the flush transaction cannot be sold to the vault.
     function _preview(uint256 vaultPart) private view returns (uint256 buy, uint160 limit) {
         (uint160 sqrtPriceX96,,,) = poolManager.getSlot0(POOL_ID);
         uint128 liquidity = poolManager.getLiquidity(POOL_ID);
-        if (liquidity == 0 || sqrtPriceX96 == 0) return (0, 0);
+        (uint160 refSqrtPriceX96, uint128 refLiquidity) = referenceState();
+        if (refLiquidity < liquidity) liquidity = refLiquidity;
+        if (liquidity == 0 || sqrtPriceX96 == 0 || refSqrtPriceX96 == 0) return (0, 0);
         uint256 virtualEth = FullMath.mulDiv(liquidity, Q96, sqrtPriceX96);
         uint256 reserveCap = FullMath.mulDiv(virtualEth, RESERVE_CAP_BPS, BPS);
         buy = vaultPart < reserveCap ? vaultPart : reserveCap;
         if (buy > MAX_FLUSH_ETH) buy = MAX_FLUSH_ETH;
         if (buy < MIN_BUY_ETH) return (0, 0);
         limit = uint160(FullMath.mulDivRoundingUp(sqrtPriceX96, MIN_SQRT_PRICE_FACTOR, 1e18));
+        uint160 refLimit = uint160(FullMath.mulDivRoundingUp(refSqrtPriceX96, MIN_SQRT_PRICE_FACTOR, 1e18));
+        if (refLimit > limit) limit = refLimit;
         if (limit <= TickMath.MIN_SQRT_PRICE) limit = TickMath.MIN_SQRT_PRICE + 1;
         if (limit >= sqrtPriceX96) return (0, 0);
     }
@@ -246,15 +300,33 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
         if (poolManager.isUnlocked()) revert MidUnlock();
         if (!opened) revert NotOpened();
         if (block.timestamp < nextFlushAt()) revert FlushTooSoon(nextFlushAt());
-        lastFlush = block.timestamp;
         awaitingUnlock = true;
-        return abi.decode(poolManager.unlock(abi.encode(msg.sender)), (uint256, uint256, uint256));
+        (ethSpent, ogToVault) = abi.decode(poolManager.unlock(abi.encode(msg.sender)), (uint256, uint256));
+
+        // The treasury is paid only once PoolManager is locked again: a recipient can then neither leave an
+        // unsettled delta that would revert this flush nor reenter it, and its gas is bounded so rejection
+        // (including consuming that gas) cannot veto the vault funding already settled above.
+        uint256 paid = heldEth;
+        if (paid != 0) {
+            heldEth = 0;
+            (bool ok,) = treasury.call{value: paid, gas: TREASURY_GAS_LIMIT}("");
+            if (ok) {
+                totalFlushed += paid;
+            } else {
+                heldEth = paid;
+                emit FlushDeferred(treasury, paid);
+                paid = 0;
+            }
+        }
+        ethToTreasury = paid;
+        emit Flushed(msg.sender, ethSpent, paid, pendingFees());
     }
 
     function unlockCallback(bytes calldata data) external onlyPoolManager returns (bytes memory) {
         if (!awaitingUnlock || !_reentrancyGuardEntered()) revert UnexpectedCallback();
         awaitingUnlock = false;
         address caller = abi.decode(data, (address));
+        _observe();
         uint256 claims = pendingFees();
         uint256 vaultPart = FullMath.mulDiv(claims, VAULT_BPS, BPS);
         uint256 clubPart = claims - vaultPart;
@@ -268,7 +340,13 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
             spent = uint256(-int256(delta.amount0()));
             ogOut = uint256(int256(delta.amount1()));
             if (spent > buy) revert UnexpectedSwapDelta();
+            // The hook's own swap bypasses afterSwap, so record the state it leaves behind here.
+            _observe();
         }
+        // Start the next reference window at this flush.
+        flushCumSqrtPriceX96 = cumSqrtPriceX96;
+        flushCumLiquidity = cumLiquidity;
+        lastFlush = block.timestamp;
         uint256 burn = spent + clubPart;
         if (burn != 0) poolManager.burn(address(this), 0, burn);
         totalSpent += spent;
@@ -278,22 +356,7 @@ contract OGClubHook is BaseHook, Ownable2Step, ReentrancyGuard, IUnlockCallback 
             heldEth += clubPart;
             poolManager.take(Currency.wrap(address(0)), address(this), clubPart);
         }
-
-        uint256 paid = heldEth;
-        if (paid != 0) {
-            heldEth = 0;
-            // Bound recipient gas so rejection (including consuming its gas) cannot veto vault funding.
-            (bool ok,) = treasury.call{value: paid, gas: TREASURY_GAS_LIMIT}("");
-            if (ok) {
-                totalFlushed += paid;
-            } else {
-                heldEth = paid;
-                emit FlushDeferred(treasury, paid);
-                paid = 0;
-            }
-        }
-        emit Flushed(caller, spent, paid, pendingFees());
-        return abi.encode(spent, ogOut, paid);
+        return abi.encode(spent, ogOut);
     }
 
     receive() external payable {
