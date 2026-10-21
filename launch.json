@@ -1,0 +1,18 @@
+{
+  "kind": "evm_contracts",
+  "contracts": [
+    {
+      "contract": "OGClubHookDeployer",
+      "constructorArgs": [
+        "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "0xce7eb1ad9e2e1c784ea05f7ea4a0fe625923d10a",
+        "0x60401e748d6c3a1f2775be9e6a41bda20eda0b80",
+        "10000",
+        "$owner",
+        "$owner",
+        "$owner"
+      ]
+    }
+  ],
+  "notes": "Deploys the accepted OGClubHookDeployer with immutable mainnet PoolManager, existing OG token, farm vault, 10000 vault basis points, and $owner as hook owner, treasury and initializer. The deployer has no admin and permissionlessly creates OGClubHook with these fixed parameters. This manifest deploys the deployer only; hook creation requires a separate deploy(salt, expected) transaction after mining against its actual deployed address and constructor-inclusive init-code hash, with low 14 address bits equal to 0x20cc. The hook constructor then checks vault.token() equals OG. The hook supports native ETH/OG, fee 10000 and tickSpacing 200, with an immutable 1% ETH club fee used entirely to buy OG for the vault; treasury changes are disabled at this split. No new token, pool opening, liquidity, ETH funding or initialization calls are included. The original initializer opens the pool separately using OpenPool and the old pool's live price. Live Sepolia rehearsal, mainnet hook deployment and Etherscan verification remain separate deployment steps."
+}
