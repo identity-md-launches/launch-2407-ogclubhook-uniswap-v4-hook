@@ -226,9 +226,13 @@ contract AdversarialLifecycleTest is HookFixture {
         assertEq(out, 0);
         assertEq(hook.pendingFees(), threshold - 1);
         _swap(true, -100);
+        // The reference window restarts at a flush, so nothing is quoted within the flush second.
+        (buy, limit) = hook.previewBuy();
+        assertEq(buy, 0);
+        assertEq(limit, 0);
+        _ready();
         (buy,) = hook.previewBuy();
         assertEq(buy, threshold);
-        _ready();
         (spent, out,) = hook.flush();
         assertEq(spent, threshold);
         assertGt(out, 0);
