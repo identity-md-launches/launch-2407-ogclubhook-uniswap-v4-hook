@@ -1,0 +1,94 @@
+{
+  "kind": "read-only public RPC observations; not deployment receipts",
+  "observations": [
+    {
+      "network": "mainnet",
+      "chainId": 1,
+      "block": 26242828,
+      "blockHash": "0xba4af60f46e342701cdac914314c80888ddf5e6f2c40cf0cf62f55869acdc414",
+      "blockTimestamp": "0x6ad906e7",
+      "rpc": "https://eth.drpc.org",
+      "contracts": {
+        "og": {
+          "address": "0xce7eb1ad9e2e1c784ea05f7ea4a0fe625923d10a",
+          "runtimeBytes": 1115,
+          "runtimeSha256": "e1e8b8b82a9018ff075a869068b6152616273e945b9b17583ce95c7f918e6ebe"
+        },
+        "vault": {
+          "address": "0x60401e748d6c3a1f2775be9e6a41bda20eda0b80",
+          "runtimeBytes": 4199,
+          "runtimeSha256": "bed4cd32965b2f3a610deee2bc738587c3684a5f99de5c96526a0cfefc2d8bbb"
+        },
+        "poolManager": {
+          "address": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+          "runtimeBytes": 24009,
+          "runtimeSha256": "3316c7b1c67095ef6fc9b7e62fc754ad1e46e1c9119564ea4f5615a252af893e"
+        },
+        "positionManager": {
+          "address": "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
+          "runtimeBytes": 23877,
+          "runtimeSha256": "0972f48e9c31c8dc0d5aefff38e0376dd545f3462e1d0da3171c36511f5cac63"
+        },
+        "stateView": {
+          "address": "0x7fFE42C4a5DEeA5b0feC41C94C136Cf115597227",
+          "runtimeBytes": 3531,
+          "runtimeSha256": "afb76fbf22525470301fdd914354516e10e64e11872c773ee33b1834e1beb2ef"
+        },
+        "universalRouter": {
+          "address": "0x66a9893cc07d91d95644aedd05d03f95e1dba8af",
+          "runtimeBytes": 19499,
+          "runtimeSha256": "5a94552ea3e34cb8c474fc7bdd0522649a7e107899d8df6b01bc15c561278ac1"
+        },
+        "permit2": {
+          "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "runtimeBytes": 9152,
+          "runtimeSha256": "62f01f46295c143ebea4d1cf12be2085d8b93d53f86d95afba4f016ee2d694ba"
+        }
+      },
+      "vaultToken": "0xCe7EB1Ad9e2E1c784ea05F7eA4A0Fe625923D10A",
+      "ogDecimals": 18
+    },
+    {
+      "network": "sepolia",
+      "chainId": 11155111,
+      "block": 11964302,
+      "blockHash": "0x51bc2b66b31cce4a45e243490e47bd0e74595d3a5a3ae771c3d38fe8fb7960b6",
+      "blockTimestamp": "0x6ad90928",
+      "rpc": "https://ethereum-sepolia-rpc.publicnode.com",
+      "contracts": {
+        "og": {
+          "address": "0x7b5488aa00c86d3364458df50b498a1356d7c846",
+          "runtimeBytes": 1851,
+          "runtimeSha256": "a459b9eb14803ab83eafab378f13e64adf2483048b95c09f43ca6e89e7bc695b"
+        },
+        "vault": {
+          "address": "0x554fd2a38cba59ef5359f1db8e3d615c408ae3a2",
+          "runtimeBytes": 4199,
+          "runtimeSha256": "5c10562f6c6f06de9b817fc2a8f76cb6f88865f28ab8e9dccdbe7cad59eb737e"
+        },
+        "poolManager": {
+          "address": "0xE03A1074c86CFeDd5C142C4F04F1a1536e203543",
+          "runtimeBytes": 24009,
+          "runtimeSha256": "3696cbfe46ea47cba6b21efda7ef3e5340cb45327923bfc029ef63c6652197b5"
+        },
+        "positionManager": {
+          "address": "0x429ba70129df741B2Ca2a85BC3A2a3328e5c09b4",
+          "runtimeBytes": 23877,
+          "runtimeSha256": "f32e3d97afc2b7921247b884ce66fd9934b79d069dc03f94bbc46480224872ef"
+        },
+        "universalRouter": {
+          "address": "0x3A9D48AB9751398BbFa63ad67599Bb04e4BdF98b",
+          "runtimeBytes": 19540,
+          "runtimeSha256": "eb3c56c399548364f753d0e8a363dcdbc626127e3000fdc589e93d31f1513786"
+        },
+        "permit2": {
+          "address": "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+          "runtimeBytes": 9152,
+          "runtimeSha256": "6d20e2ac68e651c195d261e36a41022a5f1572f653e57d8cd2ee6af4f4971c82"
+        }
+      },
+      "vaultToken": "0x7B5488Aa00c86D3364458Df50b498A1356d7C846",
+      "ogDecimals": 18
+    }
+  ]
+}

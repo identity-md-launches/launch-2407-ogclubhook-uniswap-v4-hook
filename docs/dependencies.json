@@ -1,0 +1,62 @@
+[
+  {
+    "package": "@uniswap/v4-core",
+    "version": "1.0.2",
+    "url": "https://registry.npmjs.org/@uniswap/v4-core/-/v4-core-1.0.2.tgz",
+    "sha256": "f3db3af55f3d0c52f16abe96e7db12443f243bca1f334962373f95c57611de49",
+    "gitHead": "59d3ecf53afa9264a16bba0e38f4c5d2231f80bc"
+  },
+  {
+    "package": "@uniswap/v4-periphery",
+    "version": "1.0.3",
+    "url": "https://registry.npmjs.org/@uniswap/v4-periphery/-/v4-periphery-1.0.3.tgz",
+    "sha256": "a044868e7476395e3687f78fceaf5b1a18cce98862891c2715d3e95887838994",
+    "gitHead": "60cd93803ac2b7fa65fd6cd351fd5fd4cc8c9db5"
+  },
+  {
+    "package": "@openzeppelin/contracts",
+    "version": "5.1.0",
+    "url": "https://registry.npmjs.org/@openzeppelin/contracts/-/contracts-5.1.0.tgz",
+    "sha256": "fcddd83ee65457e2dd40d207010c885b45cdf6ea2360ca8c9d4cf2cca5e2b3b2",
+    "gitHead": null
+  },
+  {
+    "package": "forge-std",
+    "version": "v1.9.7",
+    "url": "https://codeload.github.com/foundry-rs/forge-std/tar.gz/refs/tags/v1.9.7",
+    "sha256": "45157353ab49eab01d294565866731e599b32401757229689ee459aa26b7ee94"
+  },
+  {
+    "package": "OGClubFarmVault",
+    "commit": "c77c19241414f82b5eb4d84b4720cce40741874d",
+    "url": "https://raw.githubusercontent.com/identity-md-launches/launch-2398-continue-delivered-og-club/c77c19241414f82b5eb4d84b4720cce40741874d/src/OGClubFarmVault.sol",
+    "sha256": "86dc5e5368edcbed1ce22400096a2f24f2f23707fd29de42abf8214cdd8ad6d1"
+  },
+  {
+    "package": "solmate",
+    "commit": "4b47a19038b798b4a33d9749d25e570443520647",
+    "url": "https://codeload.github.com/transmissions11/solmate/tar.gz/4b47a19038b798b4a33d9749d25e570443520647",
+    "sha256": "9aa78449f8bc10931520500ec24734f089af9ac875a3334d8b512f8727241667"
+  },
+  {
+    "package": "permit2",
+    "commit": "cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+    "url": "https://codeload.github.com/Uniswap/permit2/tar.gz/cc56ad0f3439c502c246fc5cfcc3db92bb8b7219",
+    "sha256": "1f0da63e66c69fa85f2a68af7f598aca8f3354f87e7703aa3abe6522685e9f04"
+  },
+  {
+    "file": "lib/v4-core/licenses/BUSL_LICENSE",
+    "url": "https://raw.githubusercontent.com/Uniswap/v4-core/59d3ecf53afa9264a16bba0e38f4c5d2231f80bc/licenses/BUSL_LICENSE",
+    "sha256": "cd5241d8e1afe7098fa0f21059f7153348fdd25dbae5a8383a5f1dd2eb590321"
+  },
+  {
+    "file": "lib/v4-core/licenses/MIT_LICENSE",
+    "url": "https://raw.githubusercontent.com/Uniswap/v4-core/59d3ecf53afa9264a16bba0e38f4c5d2231f80bc/licenses/MIT_LICENSE",
+    "sha256": "b7b0c4379346af0701f5e4df9c861295d4a3af91dc3b15eb4356ebc571303df9"
+  },
+  {
+    "file": "lib/openzeppelin-contracts/LICENSE",
+    "url": "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-contracts/v5.1.0/LICENSE",
+    "sha256": "8b3fddff3cff904ab9bd7c48a9288fb08ab4f47b179c07af6df7886b12cb04d6"
+  }
+]
